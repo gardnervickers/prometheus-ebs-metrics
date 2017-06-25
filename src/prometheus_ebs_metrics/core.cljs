@@ -81,6 +81,7 @@
 (defn -main [& args]
   (Promclient.register.clear)
   (let [{:keys [options summary]} (parse-opts args cli-opts)]
+    (println "Options: " options)
     (cond (:help options) (println summary)
           :else
           (let [mount->name (clojure.set/map-invert (:volume options))
