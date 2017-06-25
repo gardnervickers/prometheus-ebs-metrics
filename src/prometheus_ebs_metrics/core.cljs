@@ -3,62 +3,69 @@
   (:require [cljs.core.async :as async]
             [clojure.tools.cli :refer [parse-opts]]
             [clojure.string]
-            [clojure.set]))
+            [clojure.set]
+            [cljs.nodejs :as node]
+            diskspace
+            prom-client))
 
 (set! *warn-on-infer* true)
 (enable-console-print!)
 
-(def diskspace (js/require "diskspace"))
-(def Promclient (js/require "prom-client"))
-
-(def express (js/require "express"))
-(def server (express))
+(def Promclient prom-client)
+(def http (node/require "http"))
+(def process (node/require "process"))
 
 (defn mount->gauge-map [mount->name]
   (reduce (fn [acc mount]
             (-> acc
                 (assoc-in [mount "total"]
-                          (new Promclient.Gauge
-                               #js {"name" (str (get mount->name mount) "_total_bytes")
-                                    "help" "Total bytes"}))
+                          (new prom-client/Gauge
+                               (str (get mount->name mount) "_total_bytes")
+                               "Total Bytes"
+                               #js []))
                 (assoc-in [mount "used"]
-                          (new Promclient.Gauge
-                               #js {"name" (str (get mount->name mount) "_used_bytes")
-                                    "help" "Used bytes"}))
+                          (new prom-client/Gauge
+                               (str (get mount->name mount) "_used_bytes")
+                               "Used Bytes"
+                               #js []))
                 (assoc-in [mount "free"]
-                          (new Promclient.Gauge
-                               #js {"name" (str (get mount->name mount) "_free_bytes")
-                                    "help" "Free Bytes"}))
+                          (new prom-client/Gauge
+                               (str (get mount->name mount) "_free_bytes")
+                               "Free Bytes"
+                               #js []))
                 (assoc-in [mount "status"]
-                          (new Promclient.Gauge
-                               #js {"name" (str (get mount->name mount) "_status")
-                                    "help" "Status"}))))
+                          (new prom-client/Gauge
+                               (str (get mount->name mount) "_status")
+                               "Status"
+                               #js []))))
           {}
           (keys mount->name)))
 
-(defn set-guage-metric! [metrics-map mount k v]
+(defn set-gauge-metric! [metrics-map mount k v]
   (.set ^js/Promclient.Gauge (get-in metrics-map [mount k]) v))
 
-(defn update-metrics! [mount guage-map results]
+(defn update-metrics! [mount gauge-map results]
   (println "Updating metrics for: " mount " : " (get results mount))
-  (set-guage-metric! guage-map mount "total" (or (get-in results [mount "total"]) 0))
-  (set-guage-metric! guage-map mount "used" (or (get-in results [mount "used"]) 0))
-  (set-guage-metric! guage-map mount "free" (or (get-in results [mount "free"]) 0)))
+  (set-gauge-metric! gauge-map mount "total" (or (get-in results [mount "total"]) 0))
+  (set-gauge-metric! gauge-map mount "used" (or (get-in results [mount "used"]) 0))
+  (set-gauge-metric! gauge-map mount "free" (or (get-in results [mount "free"]) 0)))
 
 (defn start-collection-loop [timeout mounts mount->gauge]
-  (let [diskspace ^js/diskspace diskspace]
-    (go-loop []
-             (println "Starting metrics gathering loop for mounts: " mounts)
-             (when true
-               (async/<! (async/timeout timeout))
-               (doseq [mount mounts]
-                 (js/diskspace.check mount
-                                     (fn [err result]
-                                       (if err
-                                         (js/console.log err)
-                                         (update-metrics! mount mount->gauge {mount (js->clj result)})))))
-               (recur))
-             (println "Finished metrics gathering loop"))))
+  (go-loop []
+           (println "Starting metrics gathering loop for mounts: " mounts)
+           (async/<! (async/timeout timeout))
+           (doseq [mount mounts]
+             (diskspace/check mount
+                              (fn [err result]
+                                (if err
+                                  (js/console.log err)
+                                  (update-metrics! mount mount->gauge {mount (js->clj result)})))))
+           (recur)))
+
+(def metrics-handler
+  (fn [req ^js/http.ServerResponse res]
+    (.setHeader res "Content-Type" Promclient.register.contentType)
+    (.end res (.metrics ^js/Promclient.register Promclient.register))))
 
 (def cli-opts
   [["-p" "--port PORT" "Port number"
@@ -72,20 +79,16 @@
    ["-h" "--help"]])
 
 (defn -main [& args]
-
   (Promclient.register.clear)
   (let [{:keys [options summary]} (parse-opts args cli-opts)]
     (cond (:help options) (println summary)
           :else
           (let [mount->name (clojure.set/map-invert (:volume options))
                 mounts (keys mount->name)
-                mount->gauge (mount->gauge-map mount->name)]
+                mount->gauge (mount->gauge-map mount->name)
+                server (.createServer http metrics-handler)]
             (println "Starting volume metrics: "  )
             (start-collection-loop 5000 mounts mount->gauge)
-            (.get server "/metrics" (fn [req res]
-                                      (.set res "Content-Type" Promclient.register.contentType)
-                                      (.end res (.metrics Promclient.register))))
             (.listen server (:port options))))))
 
 (set! *main-cli-fn* -main)
-
