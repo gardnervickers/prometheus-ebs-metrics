@@ -1,3 +1,3 @@
-FROM node:6.11.0-alpine
+FROM node:8.1.2-alpine
 ADD bin/main.js main.js
 ENTRYPOINT ["node", "main.js"]
