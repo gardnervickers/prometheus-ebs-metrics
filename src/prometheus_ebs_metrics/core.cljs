@@ -10,9 +10,9 @@
 
 (set! *warn-on-infer* true)
 (enable-console-print!)
-
 (def Promclient prom-client)
 (def http (node/require "http"))
+
 
 (defn mount->gauge-map [mount->name]
   (reduce (fn [acc mount]
@@ -44,10 +44,10 @@
   (.set ^js/Promclient.Gauge (get-in metrics-map [mount k]) v))
 
 (defn update-metrics! [mount gauge-map results]
-  (println "Updating metrics for: " mount " : " (get results mount))
-  (set-gauge-metric! gauge-map mount "total" (or (get-in results [mount "total"]) 0))
-  (set-gauge-metric! gauge-map mount "used" (or (get-in results [mount "used"]) 0))
-  (set-gauge-metric! gauge-map mount "free" (or (get-in results [mount "free"]) 0)))
+  (println "Updating metrics for: " mount " : " results)
+  (set-gauge-metric! gauge-map mount "total" (or (.-total results) 0))
+  (set-gauge-metric! gauge-map mount "used" (or (.-used results) 0))
+  (set-gauge-metric! gauge-map mount "free" (or (.-free results) 0)))
 
 (defn start-collection-loop [timeout mounts mount->gauge]
   (go-loop []
@@ -58,7 +58,7 @@
                               (fn [err result]
                                 (if err
                                   (js/console.log err)
-                                  (update-metrics! mount mount->gauge {mount (js->clj result)})))))
+                                  (update-metrics! mount mount->gauge result)))))
            (recur)))
 
 (def metrics-handler

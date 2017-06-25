@@ -359,3 +359,9 @@ http.Agent.prototype.requests;
  * @type {http.Agent}
  */
 http.globalAgent;
+
+
+diskspace.result.total
+diskspace.result.used
+diskspace.result.free
+diskspace.result.status
