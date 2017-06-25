@@ -29,9 +29,8 @@
                                         :closure-warnings {:non-standard-jsdoc :off
                                                            :internet-explorer-checks :off}}}
                        :advanced {:source-paths ["src"]
-                                  :incremental true
                                   :assert true
-                                  :compiler {:output-to "target/main.js"
+                                  :compiler {:output-to "bin/main.js"
                                              :warnings true
                                              :optimizations :advanced
                                              :target :nodejs
