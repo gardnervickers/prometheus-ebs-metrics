@@ -13,7 +13,6 @@
 
 (def Promclient prom-client)
 (def http (node/require "http"))
-(def process (node/require "process"))
 
 (defn mount->gauge-map [mount->name]
   (reduce (fn [acc mount]
